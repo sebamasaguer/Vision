@@ -1,0 +1,191 @@
+# Compose de PRODUCCION para Dokploy.
+#
+# Diferencias respecto a compose.yaml (uso local):
+#  - Sin "ports:" en postgres/redis/minio/backend/frontend: nada queda expuesto
+#    directo al host. La exposicion publica de backend y frontend se configura
+#    en Dokploy > tu app > pestana "Domains" (Dokploy inyecta las labels de
+#    Traefik solo; ver docs/DEPLOY_DOKPLOY.md).
+#  - datasets/, reports/ y models/ son volumenes nombrados (persisten entre
+#    redeploys) en vez de bind mounts a ./datasets, ./reports, ./models: Dokploy
+#    vuelve a clonar el repo en cada deploy y borraria esos bind mounts.
+#  - demo/ sigue siendo bind mount desde el repo: es contenido estatico de
+#    referencia, no algo que la app escriba en runtime.
+#  - DATABASE_URL/REDIS_URL/MINIO_ENDPOINT quedan fijos por la topologia interna
+#    del compose (nombres de servicio), no van en el .env.
+#  - Se quita el servicio "trainer" (GPU, solo para entrenar; no aplica a un
+#    despliegue web en un VPS de Dokploy).
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - hysvision_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - hysvision_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
+    volumes:
+      - hysvision_minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    image: hys-vision-v110-backend:latest
+    build:
+      context: ./backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    volumes:
+      - hysvision_models_data:/opt/hys-models
+      - hysvision_datasets_data:/opt/hys-datasets
+      - ./demo:/demo:ro
+      - hysvision_reports_data:/reports
+    command: >-
+      sh -c "alembic upgrade head && python -m app.bootstrap && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  camera-worker:
+    image: hys-vision-v110-backend:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./demo:/demo:ro
+    command: ["python", "-m", "app.camera_worker"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.worker_health"]
+      interval: 10s
+      timeout: 8s
+      retries: 6
+      start_period: 15s
+
+  vision-engine:
+    image: hys-vision-v110-backend:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      camera-worker:
+        condition: service_healthy
+    volumes:
+      - hysvision_models_data:/opt/hys-models:ro
+      - hysvision_datasets_data:/opt/hys-datasets:ro
+      - ./demo:/demo:ro
+      - hysvision_reports_data:/reports
+    command: ["python", "-m", "app.vision_engine"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.vision_worker_health"]
+      interval: 10s
+      timeout: 8s
+      retries: 6
+      start_period: 15s
+
+  alert-worker:
+    image: hys-vision-v110-backend:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    command: ["python", "-m", "app.alert_worker"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.alert_worker_health"]
+      interval: 10s
+      timeout: 8s
+      retries: 6
+      start_period: 15s
+
+  frontend:
+    image: hys-vision-v110-frontend:latest
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+      camera-worker:
+        condition: service_healthy
+      vision-engine:
+        condition: service_healthy
+      alert-worker:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  hysvision_postgres_data:
+  hysvision_redis_data:
+  hysvision_minio_data:
+  hysvision_models_data:
+  hysvision_datasets_data:
+  hysvision_reports_data:

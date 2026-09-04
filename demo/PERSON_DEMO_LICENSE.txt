@@ -1,0 +1,11 @@
+HYS Vision IA — person_demo_pd.mp4
+
+Source image: skimage.data.astronaut — photograph of astronaut Eileen Collins.
+Source documentation: https://scikit-image.org/docs/stable/api/skimage.data.html#skimage.data.astronaut
+Rights statement in scikit-image documentation: "No known copyright restrictions, released into the public domain."
+Original source referenced by scikit-image: NASA Great Images database.
+
+HYS Vision IA transformation:
+- The source image was resized and animated over a synthetic background to create a 10-second MP4 QA clip.
+- No third-party music/audio is included.
+- The clip is distributed only as a QA/demo asset for person-detection validation.

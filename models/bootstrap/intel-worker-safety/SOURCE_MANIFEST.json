@@ -1,0 +1,20 @@
+﻿{
+    "name":  "Intel Worker Safety Gear Detection Bootstrap",
+    "license":  "MIT",
+    "source":  "Intel Edge AI Resources",
+    "source_url":  "https://raw.githubusercontent.com/open-edge-platform/edge-ai-resources/edd25f37c324a9ef73df1642354b2ba5fa7b7df5/models/worker-safety-gear-detection.zip",
+    "source_commit":  "edd25f37c324a9ef73df1642354b2ba5fa7b7df5",
+    "downloaded_at":  "2026-09-04T04:03:03.1078877Z",
+    "zip_sha256":  "c9eb6088714590158b78dfe9f3fad4df392385ed2bb84d2f182e8a0b2ec18c10",
+    "model_xml_sha256":  "9936c6349678579f91a416a9203b8824a43dd304e1de95ab0df8ac7cde652a14",
+    "model_bin_sha256":  "f16255964879f3a48c2a6ae0d148a36d302ead5cf096daa10aff03589dcea600",
+    "classes":  [
+                    "HELMET",
+                    "VEST"
+                ],
+    "label_map":  {
+                      "2":  "VEST",
+                      "1":  "HELMET"
+                  },
+    "note":  "Bootstrap real para puesta en marcha/shadow. SAFETY_SHOES no soportado. No es modelo HYS certificado."
+}

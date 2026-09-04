@@ -1,0 +1,6 @@
+﻿Intel Worker Safety Gear Detection bootstrap
+License: MIT
+Source commit: edd25f37c324a9ef73df1642354b2ba5fa7b7df5
+Source: https://raw.githubusercontent.com/open-edge-platform/edge-ai-resources/edd25f37c324a9ef73df1642354b2ba5fa7b7df5/models/worker-safety-gear-detection.zip
+HYS mapping verified against Intel sample code: DetectionOutput 1=safety_helmet, 2=safety_jacket.
+The original model artifacts remain unmodified; HYS only stores source and SHA-256 provenance.

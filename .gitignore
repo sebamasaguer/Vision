@@ -1,0 +1,28 @@
+# Secrets / local env
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.sqlite3
+backend/test_hysvision.db
+backend/**/*.db
+.pytest_cache/
+.venv/
+venv/
+
+# Node / frontend build
+frontend/node_modules/
+frontend/dist/
+
+# OS / editors
+.DS_Store
+*.swp
+
+# Runtime data mounted into containers locally (kept on disk, not versioned)
+# datasets/ and reports/ hold working/generated data; models/bootstrap is the
+# only fixed seed asset and stays tracked (see docs/DEPLOY_DOKPLOY.md).
+datasets/*/working/
+reports/block9/

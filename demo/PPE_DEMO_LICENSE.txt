@@ -1,0 +1,1 @@
+PPE demo is a derivative of the existing public-domain PERSON QA sample in this project, with project-generated synthetic PPE overlays. It is for QA only, not evidence of production model accuracy.
