@@ -174,6 +174,14 @@ los necesitás en producción o si arrancás con datasets nuevos.
   Dokploy nombra los contenedores solo.
 - **Se quitó el servicio `trainer`**: necesita GPU y corre solo bajo el
   profile `training`; no aplica a un deploy web en un VPS de Dokploy.
+- **Red interna explícita `hysvision_internal`**: los 7 servicios la declaran
+  a propósito en vez de depender de la red default implícita de Compose.
+  `backend` y `frontend` tienen Domain asignado en Dokploy, que les suma su
+  propia red de Traefik para el ruteo público — en un deploy real se observó
+  que `backend` dejaba de poder resolver `minio` por nombre (`NameResolutionError`
+  persistente, no transitorio) apenas se le asignó un Domain. Fijar una red
+  propia para los 7 servicios evita depender de cómo Dokploy mezcle esa red
+  adicional con la default del compose.
 
 Fuentes: [Dokploy — Docker Compose](https://docs.dokploy.com/docs/core/docker-compose),
 [Dokploy — Domains](https://docs.dokploy.com/docs/core/docker-compose/domains),

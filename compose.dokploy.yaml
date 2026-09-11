@@ -16,12 +16,19 @@
 #    siguen fijos por la topologia interna del compose (nombres de servicio).
 #  - Se quita el servicio "trainer" (GPU, solo para entrenar; no aplica a un
 #    despliegue web en un VPS de Dokploy).
+#  - Red interna explicita "hysvision_internal": no se deja la red default
+#    implicita de Docker Compose. Backend y frontend llevan Domain asignado en
+#    Dokploy, que les inyecta ademas su propia red de Traefik para el ruteo;
+#    declarar una red propia y sumar a los 7 servicios ahi garantiza que se
+#    resuelven entre si por nombre de servicio (minio, redis, etc.) pase lo
+#    que pase con esa red adicional de Traefik.
 
 services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
+    networks: [hysvision_internal]
     volumes:
       - hysvision_redis_data:/data
     healthcheck:
@@ -34,6 +41,7 @@ services:
     image: minio/minio:latest
     restart: unless-stopped
     command: server /data --console-address ":9001"
+    networks: [hysvision_internal]
     environment:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
@@ -51,6 +59,7 @@ services:
       context: ./backend
     restart: unless-stopped
     env_file: .env
+    networks: [hysvision_internal]
     environment:
       REDIS_URL: redis://redis:6379/0
       MINIO_ENDPOINT: minio:9000
@@ -76,6 +85,7 @@ services:
     image: hys-vision-v110-backend:latest
     restart: unless-stopped
     env_file: .env
+    networks: [hysvision_internal]
     environment:
       REDIS_URL: redis://redis:6379/0
     depends_on:
@@ -95,6 +105,7 @@ services:
     image: hys-vision-v110-backend:latest
     restart: unless-stopped
     env_file: .env
+    networks: [hysvision_internal]
     environment:
       REDIS_URL: redis://redis:6379/0
       MINIO_ENDPOINT: minio:9000
@@ -120,6 +131,7 @@ services:
     image: hys-vision-v110-backend:latest
     restart: unless-stopped
     env_file: .env
+    networks: [hysvision_internal]
     environment:
       REDIS_URL: redis://redis:6379/0
     depends_on:
@@ -142,6 +154,7 @@ services:
       args:
         VITE_API_BASE_URL: ${VITE_API_BASE_URL}
     restart: unless-stopped
+    networks: [hysvision_internal]
     depends_on:
       backend:
         condition: service_healthy
@@ -156,6 +169,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 20
+
+networks:
+  hysvision_internal:
+    driver: bridge
 
 volumes:
   hysvision_redis_data:
