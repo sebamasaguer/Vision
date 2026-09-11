@@ -1,7 +1,8 @@
 # Deploy en Dokploy (Docker Compose)
 
-Este proyecto es multi-servicio (Postgres, Redis, MinIO, backend API, 3 workers
-y frontend) con dependencias y healthchecks entre ellos. La forma correcta de
+Este proyecto es multi-servicio (Redis, MinIO, backend API, 3 workers y
+frontend, más una base **Postgres remota externa** — no corre en este
+compose) con dependencias y healthchecks entre ellos. La forma correcta de
 llevarlo a Dokploy es como **una sola app de tipo "Compose"**, no como
 Dockerfiles sueltos — así se conservan los `depends_on`/`healthcheck` tal como
 están pensados.
@@ -54,9 +55,18 @@ de ejemplo). Dokploy guarda esto como el `.env` que `env_file: .env` lee en
 Puntos que **tenés que cambiar sí o sí** antes de deployar (no dejar el valor
 de ejemplo):
 
-- `POSTGRES_PASSWORD`, `MINIO_SECRET_KEY`, `JWT_SECRET`,
-  `BOOTSTRAP_ADMIN_PASSWORD` → generar valores random fuertes.
-- `BOOTSTRAP_ADMIN_EMAIL` → el mail real del admin inicial.
+- `DATABASE_URL` → string de conexión completo a tu Postgres de **producción,
+  remota** (no corre en este compose). Formato psycopg:
+  `postgresql+psycopg://usuario:password@host:5432/nombre_db?sslmode=require`
+  (sacá `?sslmode=require` solo si tu proveedor no lo exige). El servidor
+  donde corre Dokploy tiene que poder alcanzar ese host:puerto — revisá
+  firewall/allowlist de IP del lado del proveedor de la base **antes** de
+  deployar, o el backend no va a levantar.
+- `MINIO_SECRET_KEY`, `JWT_SECRET`, `BOOTSTRAP_ADMIN_PASSWORD` → generar
+  valores random fuertes.
+- `BOOTSTRAP_ADMIN_EMAIL` → el mail real del admin inicial (el bootstrap es
+  idempotente: si esa base ya tiene datos de producción, no duplica nada, solo
+  crea lo que falte).
 - `CORS_ORIGINS` → el dominio público del frontend, en formato JSON:
   `["https://app.tudominio.com"]`. El backend usa `allow_credentials=True`,
   así que no acepta `"*"` como origen.
@@ -66,10 +76,15 @@ de ejemplo):
   dominio del backend después, hay que rebuildear el frontend, no solo
   reiniciarlo.
 
-`DATABASE_URL`, `REDIS_URL` y `MINIO_ENDPOINT` **no van en el `.env`**: ya
-están fijados en `compose.dokploy.yaml` apuntando a los nombres de servicio
-internos (`postgres`, `redis`, `minio`). No los agregues en Dokploy o vas a
-pisar el valor correcto.
+`REDIS_URL` y `MINIO_ENDPOINT` **no van en el `.env`**: ya están fijados en
+`compose.dokploy.yaml` apuntando a los nombres de servicio internos (`redis`,
+`minio`). No los agregues en Dokploy o vas a pisar el valor correcto.
+
+> **Antes del primer deploy**: hacé un backup de esa base remota. El backend
+> corre `alembic upgrade head` al arrancar (ver paso 4), y eso va a aplicar
+> sobre esa base todas las migraciones que le falten. Si la base no está en
+> la revisión que este código espera, conviene probar primero contra una
+> copia/staging antes de apuntar el `.env` de Dokploy a la base real.
 
 ## 3. Dominios (Domains)
 
@@ -81,8 +96,9 @@ da Let's Encrypt automático):
 | `frontend` | 80              | `app.tudominio.com`        |
 | `backend`  | 8000            | `api.tudominio.com`        |
 
-Postgres, Redis, MinIO y los 3 workers **no necesitan dominio ni puerto
-público** — el backend sirve la evidencia (fotos/video de eventos) proxificada
+Redis, MinIO y los 3 workers **no necesitan dominio ni puerto público** (la
+base Postgres tampoco corre acá, es remota y externa) — el backend sirve la
+evidencia (fotos/video de eventos) proxificada
 desde MinIO a través de su propia API (`/events/evidence/{id}/content`), así
 que MinIO nunca se expone a Internet.
 
@@ -103,8 +119,10 @@ así que la primera vez deja la base de datos migrada y el usuario admin creado
 con `BOOTSTRAP_ADMIN_EMAIL`/`BOOTSTRAP_ADMIN_PASSWORD`.
 
 Mirá los logs de cada servicio desde la pestaña **Logs**; los healthchecks
-deberían ponerse en verde en orden: `postgres`/`redis`/`minio` → `backend` →
-`camera-worker` → `vision-engine` → `alert-worker` → `frontend`.
+deberían ponerse en verde en orden: `redis`/`minio` → `backend` →
+`camera-worker` → `vision-engine` → `alert-worker` → `frontend`. Si `backend`
+no levanta, lo primero a revisar en sus logs es la conexión a `DATABASE_URL`
+(host/puerto alcanzable, credenciales, SSL).
 
 ## 5. (Opcional) Cargar el modelo bootstrap y datasets existentes
 
@@ -135,15 +153,22 @@ los necesitás en producción o si arrancás con datasets nuevos.
 - **Sin `ports:` en ningún servicio**: la exposición pública la maneja Dokploy
   vía Traefik + la pestaña Domains, no bindeos de puerto en el host. Evita
   choques de puertos con otras apps en el mismo VPS y exposición sin HTTPS.
+- **Sin servicio `postgres`**: la base es remota y externa (ya tiene datos de
+  producción), no corre como contenedor acá. El backend y los 3 workers se
+  conectan directo con `DATABASE_URL` desde el `.env`. `compose.yaml` (uso
+  local) sí sigue trayendo Postgres en contenedor, para no depender de la base
+  remota en desarrollo.
 - **`datasets/`, `reports/`, `models/` → volúmenes nombrados** en vez de bind
   mounts `./datasets`, `./reports`, `./models`: sobreviven a los redeploys
   (ver punto 5).
 - **`demo/` sigue como bind mount** del repo: es contenido de referencia
   estático (videos de demo), no algo que la app escriba en runtime, así que
   no hay pérdida de datos al redeployar.
-- **`DATABASE_URL`/`REDIS_URL`/`MINIO_ENDPOINT` fijos en el compose**, no en
-  `.env`: son internos a la topología de servicios y no deberían poder
-  desincronizarse por un typo en las env vars de Dokploy.
+- **`REDIS_URL`/`MINIO_ENDPOINT` fijos en el compose**, no en `.env`: son
+  internos a la topología de servicios (Redis y MinIO sí corren acá) y no
+  deberían poder desincronizarse por un typo en las env vars de Dokploy.
+  `DATABASE_URL` en cambio sí va en el `.env`, porque apunta a un host externo
+  que solo vos conocés.
 - **Se quitó `container_name`** en cada servicio: nombres fijos pueden chocar
   si alguna vez corrés dos deploys de este proyecto en el mismo Docker host;
   Dokploy nombra los contenedores solo.
