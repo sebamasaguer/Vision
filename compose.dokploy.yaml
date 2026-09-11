@@ -17,11 +17,13 @@
 #  - Se quita el servicio "trainer" (GPU, solo para entrenar; no aplica a un
 #    despliegue web en un VPS de Dokploy).
 #  - Red interna explicita "hysvision_internal": no se deja la red default
-#    implicita de Docker Compose. Backend y frontend llevan Domain asignado en
-#    Dokploy, que les inyecta ademas su propia red de Traefik para el ruteo;
-#    declarar una red propia y sumar a los 7 servicios ahi garantiza que se
-#    resuelven entre si por nombre de servicio (minio, redis, etc.) pase lo
-#    que pase con esa red adicional de Traefik.
+#    implicita de Docker Compose. Los 7 servicios la comparten para resolverse
+#    entre si por nombre (minio, redis, etc.).
+#  - "dokploy-network" (externa, la crea Dokploy/Traefik, no este compose) se
+#    suma ademas a backend y frontend -- son los unicos con Domain publico
+#    asignado, y Traefik necesita estar en la misma red que ellos para
+#    poder proxearles trafico. Sin esto se vio Bad Gateway en el dominio del
+#    frontend aunque el contenedor estuviera sano puertas adentro.
 
 services:
   redis:
@@ -59,7 +61,7 @@ services:
       context: ./backend
     restart: unless-stopped
     env_file: .env
-    networks: [hysvision_internal]
+    networks: [hysvision_internal, dokploy-network]
     environment:
       REDIS_URL: redis://redis:6379/0
       MINIO_ENDPOINT: minio:9000
@@ -154,7 +156,7 @@ services:
       args:
         VITE_API_BASE_URL: ${VITE_API_BASE_URL}
     restart: unless-stopped
-    networks: [hysvision_internal]
+    networks: [hysvision_internal, dokploy-network]
     depends_on:
       backend:
         condition: service_healthy
@@ -173,6 +175,8 @@ services:
 networks:
   hysvision_internal:
     driver: bridge
+  dokploy-network:
+    external: true
 
 volumes:
   hysvision_redis_data:
