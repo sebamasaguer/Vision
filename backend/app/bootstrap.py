@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 from datetime import datetime, timezone
 from sqlalchemy import select
@@ -94,11 +95,26 @@ def seed_admin(db: Session):
     elif super_role not in admin.roles:
         admin.roles.append(super_role); db.commit()
 
-def ensure_minio_bucket():
+def ensure_minio_bucket(retries: int = 10, delay_seconds: float = 3.0):
+    # Reintenta ante fallas transitorias de red/DNS al arrancar (p.ej. el DNS
+    # interno de Docker Compose todavia no propago el alias del servicio
+    # "minio" a este contenedor en el primer intento). Sin esto, una unica
+    # falla transitoria aca tumba todo el arranque del backend (bootstrap
+    # corre antes de uvicorn).
     from minio import Minio
     client = Minio(settings.minio_endpoint, access_key=settings.minio_access_key, secret_key=settings.minio_secret_key, secure=settings.minio_secure)
-    if not client.bucket_exists(settings.minio_bucket_evidence):
-        client.make_bucket(settings.minio_bucket_evidence)
+    last_error: Exception | None = None
+    for attempt in range(1, retries + 1):
+        try:
+            if not client.bucket_exists(settings.minio_bucket_evidence):
+                client.make_bucket(settings.minio_bucket_evidence)
+            return
+        except Exception as exc:
+            last_error = exc
+            if attempt < retries:
+                print(f"ensure_minio_bucket: intento {attempt}/{retries} fallo ({exc}); reintentando en {delay_seconds}s")
+                time.sleep(delay_seconds)
+    raise last_error
 
 def seed_vision_models(db: Session):
     from app.models.camera import Camera
