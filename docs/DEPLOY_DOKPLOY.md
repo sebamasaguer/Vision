@@ -162,6 +162,13 @@ Domains ni DNS nuevo:
 `apivision.saltia.com.ar` (backend), `CORS_ORIGINS` y `VITE_API_BASE_URL` no
 cambian — el split es solo de path en el frontend, no afecta el origen HTTP.
 
+**Ojo con dejar esto sin configurar en un dominio público**: con las 3
+variables vacías, el formulario "Solicitar Demo" de la landing **no falla
+visiblemente** — el modal simula un envío exitoso y muestra igual el mensaje
+de agradecimiento, sin mandar nada (ver `landing/src/components/DemoModal.jsx`).
+Un visitante real puede creer que se registró para una demo sin que el lead
+llegue a ningún lado.
+
 Si en algún momento se cargan credenciales reales de EmailJS
 (`VITE_EMAILJS_SERVICE_ID`/`TEMPLATE_ID`/`PUBLIC_KEY` en el `.env` de
 Dokploy), hace falta un **rebuild** del servicio `frontend` para que tomen
