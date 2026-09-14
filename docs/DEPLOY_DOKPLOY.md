@@ -148,6 +148,26 @@ repo clonado ahí). Los `datasets/` de trabajo que tenés localmente
 (`HYS-PPE-20260904`, `HYS-PPE-REAL`) no se migran automáticamente — decidí si
 los necesitás en producción o si arrancás con datasets nuevos.
 
+## Landing page + app bajo /admin
+
+Desde el deploy que agregó `landing/`, el servicio `frontend` sirve **dos
+apps por path** en el mismo dominio y el mismo `Domain` que ya estaba
+configurado en Dokploy — no hace falta ninguna acción nueva en la pestaña
+Domains ni DNS nuevo:
+
+- `https://vision.saltia.com.ar/` → landing de marketing (`landing/`).
+- `https://vision.saltia.com.ar/admin/` → la app/dashboard operativo
+  (`frontend/`, con `base: '/admin/'` en su `vite.config.ts`).
+
+`apivision.saltia.com.ar` (backend), `CORS_ORIGINS` y `VITE_API_BASE_URL` no
+cambian — el split es solo de path en el frontend, no afecta el origen HTTP.
+
+Si en algún momento se cargan credenciales reales de EmailJS
+(`VITE_EMAILJS_SERVICE_ID`/`TEMPLATE_ID`/`PUBLIC_KEY` en el `.env` de
+Dokploy), hace falta un **rebuild** del servicio `frontend` para que tomen
+efecto (se hornean en build, igual que `VITE_API_BASE_URL`) — no alcanza con
+reiniciar el contenedor.
+
 ## Qué se cambió respecto al compose.yaml local, y por qué
 
 - **Sin `ports:` en ningún servicio**: la exposición pública la maneja Dokploy
