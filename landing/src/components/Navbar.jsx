@@ -63,6 +63,14 @@ export default function Navbar({ darkMode, toggleTheme, onOpenDemo }) {
             {darkMode ? <Sun size={17} className="text-amber-400" /> : <Moon size={17} />}
           </button>
 
+          {/* Login link */}
+          <a
+            href="/admin/"
+            className="hidden items-center gap-2 rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition-all duration-200 hover:border-emerald-500 hover:text-emerald-700 md:inline-flex dark:border-slate-700 dark:text-slate-200 dark:hover:border-emerald-500 dark:hover:text-emerald-400"
+          >
+            Iniciar sesión
+          </a>
+
           {/* Request Demo CTA */}
           <button
             onClick={onOpenDemo}
@@ -97,6 +105,14 @@ export default function Navbar({ darkMode, toggleTheme, onOpenDemo }) {
                 {link.label}
               </a>
             ))}
+
+            <a
+              href="/admin/"
+              onClick={() => setMobileOpen(false)}
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200"
+            >
+              Iniciar sesión
+            </a>
 
             <button
               onClick={() => {
